@@ -1,0 +1,335 @@
+Flink概述
+https://flink.apache.org
+1. 什么是Flink？
+Flink是一个有状态的在数据流上的计算 Stateful Computations over Data Streams
+
+Apache Flink is a framework and distributed processing engine for stateful computations over unbounded and bounded data streams.
+
+1.1 框架
+1.2 分布式处理的引擎
+1.3 有状态计算
+1.4 Unbounded streams，可以被认为是流数据处理。有开始，没有结尾，中间不会中断，必须被持续进行计算。不可能等待所有数据全部到达后再进行计算。数据会以特定顺序产生，这样才能知道数据是否处理完成。
+1.5 bounded data streams，可以被看作是批处理。有头有尾。一定有一个窗口期，而这个窗口是事先确定的。
+
+
+2. Flink分层接口的API： 复杂度依次提高
+High-level： SQL/Table API
+Stream-Batch Data Processing： DataStream API
+Stateful Event Driven Applications： ProcessFunction
+
+https://flink.apache.org/flink-applications.html
+
+
+3. Flink运行的模式
+Deploy Applications Anywhere
+所有的东西都是通过REST的方式去调用
+可以以任意规模的大小去执行(集群)。
+
+
+4. 常见的框架的对比
+Spark：结构化流，Streaming。以批处理为主，流处理是批处理处理的一个特例（mini batch）
+Flink：流式为主，批处理是流式处理的一个特例。
+
+
+5. Flink的实用场景
+事件驱动：欺诈检测，异常检测，规则告警，业务监控，社交网络的Web应用
+数据分析：电信网络质量监控，产品更新分析，图分析
+数据管道：实时搜索索引（电商）产生数据，再转送给Flink
+
+6. Flink的发展趋势
+分析与应用程序，DataStream、DataSet 和 Table API 的角色
+批流统一
+快速批处理（有界流）
+流处理案例
+部署，扩展，安全
+生态系统
+Connectors & Formats
+其他
+
+
+开发文档
+https://ci.apache.org/projects/flink/flink-docs-release-1.9/dev/projectsetup/java_api_quickstart.html
+
+第一个批处理Java程序
+批处理应用的开发流程：
+1. 建立批处理的执行上下文
+2. 读取数据
+3. 对数据做transform——————超级核心，开发业务逻辑
+4. 执行程序
+
+public class BatchWCJApp{
+	psvm{
+		ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvionment(); //上下文运行环境
+		DataSource<String> text = env.readTextFile("hdfs://xxxxxxx"); //创建一个数据集合
+		//之后应该将读入的数据进行拆分，才能进行词频的统计处理。
+		//然后需要为每一个单词赋值为1
+		//之后就要进行合并操作，类似于按照group by key
+
+	}
+}
+
+
+第一个实时处理的Java程序
+
+批处理使用的是ExecutionEnvironment和DataSet
+流处理使用的是StreamExecutionEnvironment和DataStream
+
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+https://ci.apache.org/projects/flink/flink-docs-release-1.9/dev/api_concepts.html#specifying-keys
+
+1. 基本概念
+	1.1 转换transformations on 分布式的集合：filtering，mapping，updating state，joining，grouping，defining windows，aggregation
+	1.2 集合从哪里来？files，kafka topic，local，in-memory
+	1.3 结果通过sinks写出文件，hdfs文件或者标准输出
+
+	对比：
+	MapReduce： input --- map（reduce） --- output
+	Spark： input --- transform/action --- output
+	Flink： input --- transformation/sink --- output     sink代表数据从Flink流到这些第三方系统中：
+		Apache Kafka (sink/source)
+		Elasticsearch (sink)
+		Hadoop FileSystem (sink)
+		RabbitMQ (sink/source)
+		Redis (sink)
+		
+	1.4 DataSet和DataStream
+	是flink操作的基本单位。
+	他们是immutable(不可变)的，即他们一旦被创建，它们的内容就是不可变的；
+	transformation只是新创建一个数据集，原始数据集不变。
+	可以包含重复数据。
+	这两个集合都通过DataSource来获取。通过源码可以看到new DataSource()读取
+	前者的数据有界，后者无界
+
+2. Flink的编程模型
+	这是一种非常规则的编程，有着具体的步骤和模式。就是在集合上做转换。
+	1. 获得执行上下文，即获取执行环境（批处理和流处理是不一样的;
+	2. 读取初始化数据，即获取数据(DataSet/DataStream);
+	3. 执行在这组数据上的操作，即transformation;
+	4. 指定这些数据放到哪里，即sink到哪里去;
+	5. 触发程序的执行(让程序真正开始执行),env.execute();
+
+
+3. Lazy Evaluation延迟执行
+	所有的Flink程序都是延迟执行的。当主方法被运行，数据加载和转化操作不会立刻发生。每一个操作被建立并且被添加到程序计划中。
+	这些操作真正执行的时候是当执行被显示触发，如调用execute时，才会执行之前的所有动作。
+	这种方式让我们构建复杂程序，让Flink将其作为一个整体执行。这让Flink的性能可以提升。因为中间可以做很多内部的优化。
+
+4. 指定key
+	如常见的批处理是调用groupBy，流处理是调用keyBy
+	很多transformation，如join，keyBy，groupBy等都需要在元素的集合上定义一个key。
+	其他transformation如reduce，aggregate，window允许数据被分组在一个key的上面(用一个key代表数据集合)。
+	A DataSet is grouped as
+
+DataSet<...> input = // [...]
+DataSet<...> reduced = input
+  .groupBy(/*define key here*/)
+  .reduceGroup(/*do something*/);
+while a key can be specified on a DataStream using
+
+DataStream<...> input = // [...]
+DataStream<...> windowed = input
+  .keyBy(/*define key here*/)
+  .window(/*window specification*/);
+
+  The data model of Flink is not based on key-value pairs. 因此,你也不需要物理打包为键值对. Keys是虚拟的。
+  键被定义为一个函数，作用于实际的数据在一个组操作上。
+
+  4.1 Define keys for Tuples
+  	DataStream<Tuple3<Integer,String,Long>> input = // [...]
+	KeyedStream<Tuple3<Integer,String,Long>,Tuple> keyed = input.keyBy(0)  这里用的是第0个，即Integer作为key
+
+	DataStream<Tuple3<Integer,String,Long>> input = // [...]
+	KeyedStream<Tuple3<Integer,String,Long>,Tuple> keyed = input.keyBy(0,1)  这里用的是第一个和第二个组成的key，即Integer和String作为key
+
+	但是对于下面的这种：
+	DataStream<Tuple3<Tuple2<Integer, Float>,String,Long>> ds;
+	keyBy(0) will cause the system to use the full Tuple2 as a key (with the Integer and Float being the key). 如果想要进去Tuple2的里面，只能用下面的Field Expressions
+
+  4.2 Define keys using Field Expressions
+  	// some ordinary POJO (Plain old Java Object)
+	public class WC {
+  		public String word;
+  		public int count;
+	}
+	DataStream<WC> words = // [...]
+	DataStream<WC> wordCounts = words.keyBy("word").window(/*window specification*/);
+
+	再来看一个例子
+	public static class WC {
+  		public ComplexNestedClass complex; //nested POJO
+  		private int count;
+  		// getter / setter for private field (count)
+  		public int getCount() {
+    		return count;
+  		}
+  		public void setCount(int c) {
+    		this.count = c;
+  		}
+	}
+	public static class ComplexNestedClass {
+  		public Integer someNumber;
+  		public float someFloat;
+  		public Tuple3<Long, Long, String> word;
+  		public IntWritable hadoopCitizen;
+	}
+	这里有一些例子：
+	"count": The count field in the WC class.
+	"complex": Recursively selects all fields of the field complex of POJO type ComplexNestedClass.
+	"complex.word.f2": Selects the last field of the nested Tuple3.
+	"complex.hadoopCitizen": Selects the Hadoop IntWritable type.
+
+
+  4.3 Define keys using Key Selector Functions
+  	
+	public class WC {public String word; public int count;}
+
+	DataStream<WC> words = // [...]
+	KeyedStream<WC> keyed = words.keyBy(new KeySelector<WC, String>() {
+     	public String getKey(WC wc) { return wc.word; }
+   	});
+
+
+5. Specifying Transformation Functions 
+	5.1 Implementing an interface
+	The most basic way is to implement one of the provided interfaces:
+
+	class MyMapFunction implements MapFunction<String, Integer> {
+		public Integer map(String value) { return Integer.parseInt(value); }
+	};
+	data.map(new MyMapFunction());
+
+	5.2 Anonymous classes
+	You can pass a function as an anonymous class:
+
+	data.map(new MapFunction<String, Integer> () {
+		public Integer map(String value) { return Integer.parseInt(value); }
+	});
+
+
+	5.3 Java 8 Lambdas
+	Flink also supports Java 8 Lambdas in the Java API.
+
+	data.filter(s -> s.startsWith("http://"));
+	data.reduce((i1,i2) -> i1 + i2);
+
+
+	5.4 Rich functions
+	All transformations that require a user-defined function can instead take as argument a rich function. For example, instead of
+
+	class MyMapFunction implements MapFunction<String, Integer> {
+	  public Integer map(String value) { return Integer.parseInt(value); }
+	};
+	you can write
+	class MyMapFunction extends RichMapFunction<String, Integer> {
+	  public Integer map(String value) { return Integer.parseInt(value); }
+	};
+	and pass the function as usual to a map transformation:
+
+	data.map(new MyMapFunction());
+	Rich functions can also been defined as an anonymous class:
+
+	data.map (new RichMapFunction<String, Integer>() {
+	  public Integer map(String value) { return Integer.parseInt(value); }
+	});
+	除了用户定义的函数（map，reduce等）之外，Rich函数还提供了四种方法：open，close，getRuntimeContext和setRuntimeContext。
+	这些用于参数化函数（请参阅将参数传递给函数），创建和完成本地状态，访问广播变量（请参阅广播变量）以及访问运行时信息（如累加器和计数器）（请参阅累加器和计数器）以及有关信息的信息。
+
+6. Flink支持的数据类型
+	6.1 Java Tuples and Scala Case Classes
+	Tuple1 up to Tuple25.
+	6.2 Java POJOs
+	6.3	Primitive Types(包装器)
+	6.4	Regular Classes
+	6.5 Values(手动SerDe)
+	Value types describe their serialization and deserialization manually
+	6.6 Hadoop Writeable
+	6.7 Special Types
+
+
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+https://ci.apache.org/projects/flink/flink-docs-release-1.9/dev/batch/#data-sources
+
+批处理DataSet API
+
+Data Source
+基于文件的
+	1. readTextFile(path) / TextInputFormat - Reads files line wise and returns them as Strings.
+
+	2. readTextFileWithValue(path) / TextValueInputFormat - Reads files line wise and returns them as StringValues. StringValues are mutable strings.
+
+	3. readCsvFile(path) / CsvInputFormat - Parses files of comma (or another char) delimited fields. Returns a DataSet of tuples or POJOs. Supports the basic java types and their Value counterparts as field types.
+
+	4. readFileOfPrimitives(path, Class) / PrimitiveInputFormat - Parses files of new-line (or another char sequence) delimited primitive data types such as String or Integer.
+
+	5. readFileOfPrimitives(path, delimiter, Class) / PrimitiveInputFormat - Parses files of new-line (or another char sequence) delimited primitive data types such as String or Integer using the given delimiter.
+
+
+基于集合的：学习，测试，创造数据等使用
+	1. fromCollection(Collection) - Creates a data set from a Java.util.Collection. All elements in the collection must be of the same type.
+
+	2. fromCollection(Iterator, Class) - Creates a data set from an iterator. The class specifies the data type of the elements returned by the iterator.
+
+	3. fromElements(T ...) - Creates a data set from the given sequence of objects. All objects must be of the same type.
+
+	4. fromParallelCollection(SplittableIterator, Class) - Creates a data set from an iterator, in parallel. The class specifies the data type of the elements returned by the iterator.
+
+	5. generateSequence(from, to) - Generates the sequence of numbers in the given interval, in parallel.
+
+
+Java的例子
+1. 从集合中读取
+public class JavaDataSetDataSourceApp {
+    public static void main(String[] args) {
+        ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
+        fromCollection(env);
+
+    }
+
+    public static void fromCollection(ExecutionEnvironment environment) {
+        List<Integer> list = new ArrayList<>();
+        for(int i = 1; i <=10; i++)
+            list.add(i);
+        try {
+            environment.fromCollection(list).print();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+}
+
+2. 从文件或者文件夹创建DataSet
+public static void fromTextFile(ExecutionEnvironment environment) {
+
+        try {
+            String filePath = "hello.txt";
+            environment.readTextFile(filePath).print();
+
+            filePath = "input";
+            environment.readTextFile(filePath).print();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+
+3. 从csv文件读取
+
+
+4. 递归文件夹
+// enable recursive enumeration of nested input files
+ExecutionEnvironment env = ExecutionEnvironment.getExecutionEnvironment();
+
+// create a configuration object
+Configuration parameters = new Configuration();
+
+// set the recursive enumeration parameter
+parameters.setBoolean("recursive.file.enumeration", true);
+
+// pass the configuration to the data source
+DataSet<String> logs = env.readTextFile("file:///path/with.nested/files")
+			  .withParameters(parameters);
